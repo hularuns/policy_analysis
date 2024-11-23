@@ -22,7 +22,7 @@ class SentinelNDVI():
         cloud_mask = scl.neq(9).And(scl.neq(10))  # Mask clouds and cirrus
         return image.updateMask(cloud_mask).copyProperties(image, ['system:time_start'])
 
-    def sentinel2(self, years):
+    def sentinel2(self, year):
         for year in years:
             sentinel2 = (
                 ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
@@ -52,11 +52,11 @@ class SentinelNDVI():
                 fileFormat='GeoTIFF',
                 maxPixels=1e13
             )
-        return task
+            task.start()
 
-    def run_gee_task(self, year):
-        task = self.sentinel2(year)
-        task.start()
+    def run_gee_task(self, years):
+        self.sentinel2(years)
+        
         while True:
             tasks = ee.batch.Task.list()
             ongoing_tasks = [task for task in tasks if task.status().get('state') in ['RUNNING', 'READY']]
