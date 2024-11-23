@@ -45,7 +45,7 @@ class SentinelNDVI():
             # Export the result to Google Drive with a bounded region.
             task = ee.batch.Export.image.toDrive(
                 image=median_ndvi,
-                folder = 'worcs_ndvi',
+                folder = 'projects/policy_analysis/ndvi/sentinel2',
                 description=f"NDVI_sentinel_{year}_no_mask",
                 scale=10,  
                 region=self.roi.coordinates().getInfo(),
