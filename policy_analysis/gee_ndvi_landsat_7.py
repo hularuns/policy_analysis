@@ -1,5 +1,6 @@
 import ee
 import time
+import os
 
 # Authenticate and initialize API
 # ee.Authenticate()
@@ -8,7 +9,16 @@ class LandsatNDVI():
     def __init__(self):
         ee.Initialize()
         self.roi = ee.Geometry.Rectangle([-2.8524, 51.7836, -1.5161, 52.5075])
+        self.folder_prefix = "LANDSAT_7_"
         print("Region of Interest (ROI):", self.roi.getInfo())
+        
+    def create_subfolder(self, folder_list):
+        for folder in folder_list:
+            folder = f"{self.folder_prefix}{folder}"
+            path = os.path.join(f'ndvi/landsat7/{folder}')
+            if not os.path.exists(path):
+                os.makedirs(path)
+                print(f"{folder} created at {path}")
 
     def calculate_ndvi(self, image):
         # NDVI using Landsat 7 bands
@@ -32,36 +42,89 @@ class LandsatNDVI():
         final_mask = mask.And(slc_off_mask)
         return image.updateMask(final_mask).copyProperties(image, ['system:time_start'])
 
-    def landsat7(self, years):
+    def landsat7_median_ndvi(self, years):
         for year in years:
-            # Filter the Landsat 7 collection and process for NDVI
+            print(f"Processing year: {year}")
+
+            # Filter the Landsat 7 collection for the year
             landsat = (
                 ee.ImageCollection("LANDSAT/LE07/C02/T1_RT")
                 .filterBounds(self.roi)
-                .filterDate(f'{year}-01-01', f'{year}-12-31')  # Year range
-                .map(self.mask_clouds_and_gaps)  # Mask clouds and fill gaps
+                .filterDate(f'{year}-01-01', f'{year}-12-31')  # Strictly within the year
+                .map(self.mask_clouds_and_gaps)  # Mask clouds and SLC-off gaps
                 .map(self.calculate_ndvi)  # Add NDVI band
             )
-            
-            # Temporal compositing to fill gaps
-            composite = landsat.select('NDVI').median()
+
+            median_ndvi = landsat.select('NDVI').median()
+
             worcs_fc = ee.FeatureCollection('users/hularuns/worcs_boundary_4326')
-            composite = composite.clip(worcs_fc)
+            final_ndvi = median_ndvi.clip(worcs_fc)
 
             # Export the result to Google Drive
             task = ee.batch.Export.image.toDrive(
-                image=composite,
-                folder='projects/policy_analysis/ndvi/landsat7',
-                description=f"NDVI_Landsat7_{year}_gap_filled",
+                image=final_ndvi,
+                folder=f'{self.folder_prefix}{year}',
+                description=f"MedianNDVI_Landsat7_{year}",
                 scale=30,  # 30m resolution for Landsat 7
                 region=self.roi.coordinates().getInfo(),
                 fileFormat='GeoTIFF',
                 maxPixels=1e13
             )
             task.start()
+            
+    def landsat7_export_individual_ndvi(self, years):
+        for year in years:
+            print(f"Processing year: {year}")
+
+            # Filter the Landsat 7 collection for the year
+            landsat = (
+                ee.ImageCollection("LANDSAT/LE07/C02/T1_RT")
+                .filterBounds(self.roi)
+                .filterDate(f'{year}-01-01', f'{year}-12-31')  # Strictly within the year
+                .map(self.mask_clouds_and_gaps)  # Mask clouds and SLC-off gaps
+                .map(self.calculate_ndvi)  # Add NDVI band
+            )
+
+            # Loop through each image in the collection
+            landsat_list = landsat.toList(landsat.size())
+            for i in range(landsat.size().getInfo()):
+                image = ee.Image(landsat_list.get(i))
+                image_id = image.get('LANDSAT_PRODUCT_ID').getInfo() 
+
+                # Clip the image to the Worcestershire boundary
+                worcs_fc = ee.FeatureCollection('users/hularuns/worcs_boundary_4326')
+                final_image = image.select('NDVI').clip(worcs_fc)
+
+                # Calculate the count of valid NDVI pixels within the ROI
+                valid_pixel_count = final_image.reduceRegion(
+                    reducer=ee.Reducer.count(),
+                    geometry=self.roi,
+                    scale=30,
+                    maxPixels=1e13
+                ).get('NDVI').getInfo()
+
+                MIN_VALID_PIXELS = 5000
+                if valid_pixel_count is None or valid_pixel_count <= 500:
+                    print(f"Skipping {image_id} (no or low valid pixels in ROI).")
+                    continue
+
+                print(f"Exporting {image_id} with {valid_pixel_count} valid pixels.")
+
+                task = ee.batch.Export.image.toDrive(
+                    image=final_image,
+                    folder=f'{self.folder_prefix}{year}',
+                    description=f"NDVI_Landsat7_{image_id}",
+                    scale=30,  # 30m resolution for Landsat 7
+                    region=self.roi.coordinates().getInfo(),
+                    fileFormat='GeoTIFF',
+                    maxPixels=1e13
+                )
+                task.start()
+
 
     def run_gee_task(self, years):
-        self.landsat7(years)
+        self.create_subfolder(years)
+        self.landsat7_export_individual_ndvi(years)
         
         while True:
             tasks = ee.batch.Task.list()

@@ -13,6 +13,7 @@ rasterio = "^1.4.2"
 geopandas = "^1.0.1"
 tqdm = "^4.67.0"
 geemap = "^0.35.1"
+scipy = "^1.14.1"
 
 
 [build-system]
