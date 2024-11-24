@@ -56,7 +56,7 @@ class SentinelNDVI():
             task = ee.batch.Export.image.toDrive(
                 image=median_ndvi,
                 folder = F'{self.folder_prefix}',
-                description=f"MedianNDVI__{year}_no_mask",
+                description=f"MedianNDVI_{year}_no_mask",
                 scale=10,  
                 region=self.roi.coordinates().getInfo(),
                 fileFormat='GeoTIFF',

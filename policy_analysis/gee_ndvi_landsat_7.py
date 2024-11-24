@@ -15,7 +15,7 @@ class LandsatNDVI():
     def create_subfolder(self, folder_list):
         for folder in folder_list:
             folder = f"{self.folder_prefix}{folder}"
-            path = os.path.join(f'ndvi/landsat7/{folder}')
+            path = os.path.join(f'ndvi/LANDSAT7/{folder}')
             if not os.path.exists(path):
                 os.makedirs(path)
                 print(f"{folder} created at {path}")
