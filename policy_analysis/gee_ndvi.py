@@ -3,6 +3,7 @@ import ee
 import geemap
 import geopandas as gpd
 import time
+import os
 #authenticate and initialise api
 # ee.Authenticate()
 
@@ -10,7 +11,16 @@ class SentinelNDVI():
     def __init__(self):
         ee.Initialize()
         self.roi = ee.Geometry.Rectangle([-2.8524, 51.7836, -1.5161, 52.5075])
+        self.folder_prefix = "SENTINEL2"
         print("Region of Interest (ROI):", self.roi.getInfo())
+        
+    def create_subfolder(self, folder_list):
+        for folder in folder_list:
+            folder = f"{self.folder_prefix}{folder}"
+            path = os.path.join(f'ndvi/SENTINEL2/{folder}')
+            if not os.path.exists(path):
+                os.makedirs(path)
+                print(f"{folder} created at {path}")
 
     def calculate_ndvi(self, image):
         ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI')
@@ -45,8 +55,8 @@ class SentinelNDVI():
             # Export the result to Google Drive with a bounded region.
             task = ee.batch.Export.image.toDrive(
                 image=median_ndvi,
-                folder = 'projects/policy_analysis/ndvi/sentinel2',
-                description=f"NDVI_sentinel_{year}_no_mask",
+                folder = F'{self.folder_prefix}',
+                description=f"MedianNDVI__{year}_no_mask",
                 scale=10,  
                 region=self.roi.coordinates().getInfo(),
                 fileFormat='GeoTIFF',
@@ -55,7 +65,8 @@ class SentinelNDVI():
             task.start()
 
     def run_gee_task(self, years):
-        self.sentinel2(years)
+        self.create_subfolder(years)
+        # self.sentinel2(years)
         
         while True:
             tasks = ee.batch.Task.list()
